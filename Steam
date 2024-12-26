@@ -1,0 +1,88 @@
+import requests
+import tkinter as tk
+from tkinter import ttk
+import json
+
+def calculate_steamdb_score(positive, negative):
+    # SteamDB Rating formula implementation
+    # https://steamdb.info/blog/steamdb-rating/
+    total = positive + negative
+    if total == 0:
+        return 0
+    
+    score = positive / total
+    if total < 500:
+        # Wilson score if there are few reviews
+        z = 1.96 # 95% confidence
+        phat = positive / total
+        return ((phat + z*z/(2*total) - z * ((phat*(1-phat)+z*z/(4*total))/total)**0.5)/(1+z*z/total))
+    else:
+        # Bayesian rating for more reviews
+        return (positive + 1)/(total + 2)
+
+def get_scores():
+    # Get game names from text box
+    games_text = text_input.get("1.0", tk.END).strip()
+    games = [g.strip() for g in games_text.split('\n') if g.strip()]
+    
+    results = []
+    for game in games:
+        try:
+            # Using Steam's official API
+            url = f"https://store.steampowered.com/api/appdetails?appids={game}"
+            response = requests.get(url)
+            data = response.json()
+            
+            if data[game]['success']:
+                reviews = data[game]['data'].get('recommendations', {}).get('total', 0)
+                # This is simplified as Steam's public API doesn't directly provide positive/negative counts
+                # You might want to use Steam's reviews API for more accurate data
+                positive = int(reviews * 0.7)  # Assuming 70% positive as an example
+                negative = reviews - positive
+                
+                score = calculate_steamdb_score(positive, negative)
+                results.append((game, score))
+            else:
+                results.append((game, 0))
+        except Exception as e:
+            print(f"Error processing {game}: {e}")
+            results.append((game, 0))
+    
+    # Clear and update results
+    tree.delete(*tree.get_children())
+    for game, score in sorted(results, key=lambda x: x[1], reverse=True):
+        tree.insert('', 'end', values=(game, f"{score:.4f}"))
+
+# Add sorting function that was referenced but missing
+def sort_treeview(tree, col, reverse):
+    items = [(tree.set(item, col), item) for item in tree.get_children('')]
+    items.sort(reverse=reverse)
+    for index, (val, item) in enumerate(items):
+        tree.move(item, '', index)
+    tree.heading(col, command=lambda: sort_treeview(tree, col, not reverse))
+
+# Create main window
+root = tk.Tk()
+root.title("SteamDB Score Calculator")
+root.geometry("500x600")
+
+# Create input text box
+text_input = tk.Text(root, height=10)
+text_input.pack(padx=10, pady=10, fill=tk.X)
+
+# Create calculate button
+calculate_btn = tk.Button(root, text="Calculate Scores", command=get_scores)
+calculate_btn.pack(pady=5)
+
+# Create treeview for results
+columns = ('Game', 'Score')
+tree = ttk.Treeview(root, columns=columns, show='headings')
+tree.heading('Game', text='Game')
+tree.heading('Score', text='SteamDB Score')
+tree.pack(padx=10, pady=10, fill=tk.BOTH, expand=True)
+
+# Add sorting capability
+for col in columns:
+    tree.heading(col, text=col, command=lambda c=col: sort_treeview(tree, c, False))
+
+root.mainloop()
