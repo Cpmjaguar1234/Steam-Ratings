@@ -1,9 +1,20 @@
 import requests
 import tkinter as tk
 from tkinter import ttk, scrolledtext
-from tkinter import font as tkfont
 import json
+from tkinter.font import Font
 import webbrowser
+
+class ModernTheme:
+    # Modern color scheme
+    BG_DARK = "#1a1a1a"
+    BG_MEDIUM = "#2d2d2d"
+    BG_LIGHT = "#363636"
+    TEXT_PRIMARY = "#ffffff"
+    TEXT_SECONDARY = "#cccccc"
+    ACCENT = "#4CAF50"
+    ACCENT_HOVER = "#45a049"
+    ERROR = "#ff4444"
 
 def calculate_steamdb_score(positive, negative):
     total = positive + negative
@@ -18,150 +29,202 @@ def calculate_steamdb_score(positive, negative):
     else:
         return (positive + 1)/(total + 2)
 
-def open_steam_page(event):
-    item = tree.selection()[0]
-    app_id = tree.item(item)['values'][0]  # Get the app ID
-    webbrowser.open(f"https://store.steampowered.com/app/{app_id}")
+class SteamScoreApp:
+    def __init__(self, root):
+        self.root = root
+        self.root.title("Steam Game Score Calculator")
+        self.root.geometry("900x800")
+        self.root.configure(bg=ModernTheme.BG_DARK)
+        
+        # Configure fonts
+        self.title_font = Font(family="Helvetica", size=24, weight="bold")
+        self.header_font = Font(family="Helvetica", size=12)
+        self.content_font = Font(family="Consolas", size=11)
+        
+        self.setup_ui()
+        
+    def setup_ui(self):
+        # Header
+        header_frame = tk.Frame(self.root, bg=ModernTheme.BG_DARK)
+        header_frame.pack(pady=20, padx=20, fill=tk.X)
+        
+        title = tk.Label(
+            header_frame,
+            text="Steam Game Score Calculator",
+            font=self.title_font,
+            bg=ModernTheme.BG_DARK,
+            fg=ModernTheme.TEXT_PRIMARY
+        )
+        title.pack()
+        
+        subtitle = tk.Label(
+            header_frame,
+            text="Enter Steam AppIDs (one per line):",
+            font=self.header_font,
+            bg=ModernTheme.BG_DARK,
+            fg=ModernTheme.TEXT_SECONDARY
+        )
+        subtitle.pack(pady=(10, 0))
+        
+        # Input area
+        self.text_input = scrolledtext.ScrolledText(
+            self.root,
+            height=6,
+            font=self.content_font,
+            bg=ModernTheme.BG_LIGHT,
+            fg=ModernTheme.TEXT_PRIMARY,
+            insertbackground=ModernTheme.TEXT_PRIMARY
+        )
+        self.text_input.pack(padx=20, pady=10, fill=tk.X)
+        
+        # Calculate button
+        self.calculate_btn = tk.Button(
+            self.root,
+            text="Calculate Scores",
+            command=self.get_scores,
+            font=self.header_font,
+            bg=ModernTheme.ACCENT,
+            fg=ModernTheme.TEXT_PRIMARY,
+            activebackground=ModernTheme.ACCENT_HOVER,
+            activeforeground=ModernTheme.TEXT_PRIMARY,
+            relief=tk.FLAT,
+            padx=30,
+            pady=10,
+            cursor="hand2"
+        )
+        self.calculate_btn.pack(pady=10)
+        
+        # Results table
+        style = ttk.Style()
+        style.theme_use('clam')
+        
+        # Configure Treeview colors
+        style.configure(
+            "Custom.Treeview",
+            background=ModernTheme.BG_MEDIUM,
+            foreground=ModernTheme.TEXT_PRIMARY,
+            fieldbackground=ModernTheme.BG_MEDIUM,
+            borderwidth=0
+        )
+        style.configure(
+            "Custom.Treeview.Heading",
+            background=ModernTheme.BG_LIGHT,
+            foreground=ModernTheme.TEXT_PRIMARY,
+            relief="flat"
+        )
+        style.map(
+            "Custom.Treeview",
+            background=[('selected', ModernTheme.ACCENT)],
+            foreground=[('selected', ModernTheme.TEXT_PRIMARY)]
+        )
+        
+        # Create Treeview
+        columns = ('AppID', 'Name', 'Score', 'Reviews', 'Price')
+        self.tree = ttk.Treeview(
+            self.root,
+            columns=columns,
+            show='headings',
+            height=15,
+            style="Custom.Treeview"
+        )
+        
+        # Configure columns
+        self.tree.heading('AppID', text='App ID', command=lambda: self.sort_treeview('AppID', False))
+        self.tree.heading('Name', text='Game Name', command=lambda: self.sort_treeview('Name', False))
+        self.tree.heading('Score', text='Score', command=lambda: self.sort_treeview('Score', False))
+        self.tree.heading('Reviews', text='Total Reviews', command=lambda: self.sort_treeview('Reviews', False))
+        self.tree.heading('Price', text='Price', command=lambda: self.sort_treeview('Price', False))
+        
+        self.tree.column('AppID', width=80)
+        self.tree.column('Name', width=300)
+        self.tree.column('Score', width=100)
+        self.tree.column('Reviews', width=120)
+        self.tree.column('Price', width=100)
+        
+        # Add scrollbar
+        scrollbar = ttk.Scrollbar(self.root, orient=tk.VERTICAL, command=self.tree.yview)
+        self.tree.configure(yscrollcommand=scrollbar.set)
+        
+        self.tree.pack(padx=20, pady=20, fill=tk.BOTH, expand=True)
+        scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+        
+        # Bind double-click
+        self.tree.bind('<Double-1>', self.open_steam_page)
+        
+        # Footer
+        footer = tk.Label(
+            self.root,
+            text="Double-click any game to open its Steam page",
+            font=("Helvetica", 10),
+            bg=ModernTheme.BG_DARK,
+            fg=ModernTheme.TEXT_SECONDARY
+        )
+        footer.pack(pady=10)
 
-def get_scores():
-    # Show loading indicator
-    calculate_btn.config(state='disabled', text="Calculating...")
-    root.update()
-    
-    games_text = text_input.get("1.0", tk.END).strip()
-    games = [g.strip() for g in games_text.split('\n') if g.strip()]
-    
-    results = []
-    for game in games:
-        try:
-            url = f"https://store.steampowered.com/api/appdetails?appids={game}"
-            response = requests.get(url)
-            data = response.json()
-            
-            if data[game]['success']:
-                game_data = data[game]['data']
-                game_name = game_data['name']
-                reviews = game_data.get('recommendations', {}).get('total', 0)
-                positive = int(reviews * 0.7)
-                negative = reviews - positive
+    def open_steam_page(self, event):
+        item = self.tree.selection()[0]
+        app_id = self.tree.item(item)['values'][0]
+        webbrowser.open(f"https://store.steampowered.com/app/{app_id}")
+
+    def get_scores(self):
+        self.calculate_btn.config(state='disabled', text="Calculating...")
+        self.root.update()
+        
+        games_text = self.text_input.get("1.0", tk.END).strip()
+        games = [g.strip() for g in games_text.split('\n') if g.strip()]
+        
+        results = []
+        for game in games:
+            try:
+                url = f"https://store.steampowered.com/api/appdetails?appids={game}&cc=us"
+                response = requests.get(url)
+                data = response.json()
                 
-                score = calculate_steamdb_score(positive, negative)
-                results.append((game, game_name, score, reviews))
-            else:
-                results.append((game, "Unknown Game", 0, 0))
-        except Exception as e:
-            print(f"Error processing {game}: {e}")
-            results.append((game, "Error", 0, 0))
-    
-    tree.delete(*tree.get_children())
-    for app_id, name, score, total_reviews in sorted(results, key=lambda x: x[2], reverse=True):
-        tree.insert('', 'end', values=(app_id, name, f"{score:.4f}", f"{total_reviews:,}"))
-    
-    # Reset button state
-    calculate_btn.config(state='normal', text="Calculate Scores")
+                if data[game]['success']:
+                    game_data = data[game]['data']
+                    game_name = game_data['name']
+                    reviews = game_data.get('recommendations', {}).get('total', 0)
+                    price = game_data.get('price_overview', {}).get('final_formatted', 'N/A')
+                    
+                    positive = int(reviews * 0.7)
+                    negative = reviews - positive
+                    
+                    score = calculate_steamdb_score(positive, negative)
+                    results.append((game, game_name, score, reviews, price))
+                else:
+                    results.append((game, "Unknown Game", 0, 0, "N/A"))
+            except Exception as e:
+                print(f"Error processing {game}: {e}")
+                results.append((game, "Error", 0, 0, "N/A"))
+        
+        self.tree.delete(*self.tree.get_children())
+        for app_id, name, score, total_reviews, price in sorted(results, key=lambda x: x[2], reverse=True):
+            self.tree.insert('', 'end', values=(
+                app_id,
+                name,
+                f"{score:.4f}",
+                f"{total_reviews:,}",
+                price
+            ))
+        
+        self.calculate_btn.config(state='normal', text="Calculate Scores")
 
-def sort_treeview(tree, col, reverse):
-    items = [(tree.set(item, col), item) for item in tree.get_children('')]
-    
-    # Convert scores to float for proper numerical sorting
-    if col == 'Score':
-        items = [(float(val), item) for val, item in items]
-    elif col == 'Reviews':
-        items = [(int(val.replace(',', '')), item) for val, item in items]
-    
-    items.sort(reverse=reverse)
-    for index, (val, item) in enumerate(items):
-        tree.move(item, '', index)
-    tree.heading(col, command=lambda: sort_treeview(tree, col, not reverse))
+    def sort_treeview(self, col, reverse):
+        items = [(self.tree.set(item, col), item) for item in self.tree.get_children('')]
+        
+        # Convert values for proper sorting
+        if col == 'Score':
+            items = [(float(val), item) for val, item in items]
+        elif col == 'Reviews':
+            items = [(int(val.replace(',', '')) if val.replace(',', '').isdigit() else 0, item) for val, item in items]
+        
+        items.sort(reverse=reverse)
+        for index, (val, item) in enumerate(items):
+            self.tree.move(item, '', index)
+        
+        self.tree.heading(col, command=lambda: self.sort_treeview(col, not reverse))
 
-# Create main window with a modern theme
-root = tk.Tk()
-root.title("Steam Game Score Calculator")
-root.geometry("800x700")
-root.configure(bg='#2b2b2b')
-
-style = ttk.Style()
-style.theme_use('clam')  # Use the 'clam' theme as base
-
-# Configure colors
-style.configure("Treeview",
-                background="#2b2b2b",
-                foreground="white",
-                fieldbackground="#2b2b2b")
-style.configure("Treeview.Heading",
-                background="#3b3b3b",
-                foreground="white")
-style.map('Treeview',
-          background=[('selected', '#404040')])
-
-# Create and style the header
-header_frame = tk.Frame(root, bg='#2b2b2b')
-header_frame.pack(pady=20, padx=20, fill=tk.X)
-
-title_label = tk.Label(header_frame,
-                      text="Steam Game Score Calculator",
-                      font=('Helvetica', 24, 'bold'),
-                      bg='#2b2b2b',
-                      fg='white')
-title_label.pack()
-
-instruction_label = tk.Label(header_frame,
-                           text="Enter Steam AppIDs (one per line):",
-                           font=('Helvetica', 12),
-                           bg='#2b2b2b',
-                           fg='#cccccc')
-instruction_label.pack(pady=(10, 0))
-
-# Create input text box with modern styling
-text_input = scrolledtext.ScrolledText(root, height=6,
-                                     font=('Consolas', 11),
-                                     bg='#363636',
-                                     fg='white',
-                                     insertbackground='white')
-text_input.pack(padx=20, pady=10, fill=tk.X)
-
-# Create calculate button with modern styling
-calculate_btn = tk.Button(root,
-                         text="Calculate Scores",
-                         command=get_scores,
-                         font=('Helvetica', 12),
-                         bg='#4CAF50',
-                         fg='white',
-                         relief=tk.FLAT,
-                         padx=20,
-                         pady=10)
-calculate_btn.pack(pady=10)
-
-# Create treeview for results
-columns = ('AppID', 'Name', 'Score', 'Reviews')
-tree = ttk.Treeview(root, columns=columns, show='headings', height=15)
-
-# Configure column widths and headings
-tree.heading('AppID', text='App ID')
-tree.heading('Name', text='Game Name')
-tree.heading('Score', text='Score')
-tree.heading('Reviews', text='Total Reviews')
-
-tree.column('AppID', width=80)
-tree.column('Name', width=300)
-tree.column('Score', width=100)
-tree.column('Reviews', width=100)
-
-# Add sorting capability
-for col in columns:
-    tree.heading(col, text=col, command=lambda c=col: sort_treeview(tree, c, False))
-
-tree.pack(padx=20, pady=20, fill=tk.BOTH, expand=True)
-
-# Bind double-click to open Steam page
-tree.bind('<Double-1>', open_steam_page)
-
-# Add footer with instructions
-footer_label = tk.Label(root,
-                       text="Double-click any game to open its Steam page",
-                       font=('Helvetica', 10),
-                       bg='#2b2b2b',
-                       fg='#888888')
-footer_label.pack(pady=10)
-
-root.mainloop()
+if __name__ == "__main__":
+    root = tk.Tk()
+    app = SteamScoreApp(root)
+    root.mainloop()
